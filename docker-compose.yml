@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+
+  server:
+    depends_on:
+      db-postgresql:
+        condition: service_started
+    build: .
+    container_name: golang_service
+    networks:
+      - mynet
+    ports:
+      - ${SERVER_PORT}:3000
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_EXPOSE_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  db-postgresql:
+    image: postgres:latest
+    restart: always
+    container_name: ${DB_HOST}
+    user: ${DB_USER}
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    networks:
+      - mynet
+    ports:
+      - "${DB_PORT}:${DB_EXPOSE_PORT}"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  migrate:
+    image: migrate/migrate
+    container_name: go_migrate
+    networks:
+      - mynet
+    volumes:
+      - .:/migrations
+    command:
+      [
+        "-path",
+        "/migrations/${DB_MIGRATION_PATH}",
+        "-database",
+        "postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_EXPOSE_PORT}/${DB_NAME}?sslmode=disable",
+        "up"
+      ]
+    depends_on:
+      db-postgresql:
+        condition: service_started
+    links:
+      - db-postgresql
+
+volumes:
+  db-data:
+    name: ${DB_VOLUME}
+
+networks:
+  mynet:
+    driver: bridge
